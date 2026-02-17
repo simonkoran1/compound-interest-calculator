@@ -71,7 +71,6 @@ const DEFAULTS = isEN
     : { initialDeposit: 120000, monthlyInvestment: 5000 };
 
 // ── 6. DYNAMIC INVESTOWN RATE ─────────────────────────────────────────────────
-// Webflow renders: <script id="stats-data" type="application/json">{ "averageYield": 9.38 }</script>
 
 function loadInvestownRate(fallback) {
     try {
