@@ -256,6 +256,16 @@ function applyChartFont() {
     Chart.defaults.font.family = computed || 'Inter, sans-serif';
 }
 
+// In init(), replace the applyChartFont() call with:
+document.fonts.ready.then(() => {
+    applyChartFont();
+    // Re-apply if chart already exists (e.g. from the setTimeout)
+    if (chartInstance) {
+        chartInstance.options.plugins.legend.labels.font = { size: 13, weight: '500' };
+        chartInstance.update();
+    }
+});
+
 // ── 16. CHART HELPERS ─────────────────────────────────────────────────────────
 
 const verticalLinePlugin = {
