@@ -244,27 +244,21 @@ function updateSliderFill() {
     fill.style.width = ((slider.value - slider.min) / (slider.max - slider.min)) * 100 + '%';
 }
 
-// ── 15. SAFARI FONT FIX ───────────────────────────────────────────────────────
-// Safari does not inherit font-family into canvas contexts from the CSS cascade.
-// Chart.js reads Chart.defaults.font.family once when creating each canvas
-// context, so we must set it explicitly from the page's computed font before
-// any chart is initialised. This function is called inside init() after
-// DOMContentLoaded so getComputedStyle is fully available.
+// ── 15. SAFARI / iOS FONT FIX ────────────────────────────────────────────────
+// Safari (desktop and iOS) does not inherit font-family into canvas contexts
+// from the CSS cascade. Additionally, on iOS the font may not yet be resolved
+// at DOMContentLoaded, so we must wait for document.fonts.ready before reading
+// getComputedStyle. Chart.js picks up Chart.defaults.font.family when each
+// canvas context is created, so setting it after fonts are ready and then
+// forcing a chart redraw guarantees the correct font on all platforms.
 
 function applyChartFont() {
     const computed = getComputedStyle(document.body).fontFamily;
     Chart.defaults.font.family = computed || 'Inter, sans-serif';
+    // If the chart was already created by the setTimeout in init(),
+    // force a full redraw so it picks up the now-correct font family.
+    if (chartInstance) chartInstance.update();
 }
-
-// In init(), replace the applyChartFont() call with:
-document.fonts.ready.then(() => {
-    applyChartFont();
-    // Re-apply if chart already exists (e.g. from the setTimeout)
-    if (chartInstance) {
-        chartInstance.options.plugins.legend.labels.font = { size: 13, weight: '500' };
-        chartInstance.update();
-    }
-});
 
 // ── 16. CHART HELPERS ─────────────────────────────────────────────────────────
 
@@ -681,9 +675,11 @@ function init() {
 
     const type = getCalcType();
 
-    // Apply page font to Chart.js globally before any chart is created.
-    // This fixes Safari, which does not inherit font-family into canvas contexts.
-    applyChartFont();
+    // Wait for all web fonts to be ready before applying to Chart.js.
+    // document.fonts.ready is the only reliable hook on iOS Safari, where fonts
+    // may not be resolved at DOMContentLoaded. applyChartFont() also triggers a
+    // chart redraw in case the chart was already created by the setTimeout below.
+    document.fonts.ready.then(applyChartFont);
 
     updateSliderFill();
     updateResult();
