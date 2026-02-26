@@ -244,7 +244,19 @@ function updateSliderFill() {
     fill.style.width = ((slider.value - slider.min) / (slider.max - slider.min)) * 100 + '%';
 }
 
-// ── 15. CHART HELPERS ─────────────────────────────────────────────────────────
+// ── 15. SAFARI FONT FIX ───────────────────────────────────────────────────────
+// Safari does not inherit font-family into canvas contexts from the CSS cascade.
+// Chart.js reads Chart.defaults.font.family once when creating each canvas
+// context, so we must set it explicitly from the page's computed font before
+// any chart is initialised. This function is called inside init() after
+// DOMContentLoaded so getComputedStyle is fully available.
+
+function applyChartFont() {
+    const computed = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.family = computed || 'Inter, sans-serif';
+}
+
+// ── 16. CHART HELPERS ─────────────────────────────────────────────────────────
 
 const verticalLinePlugin = {
     id: 'verticalLine',
@@ -272,7 +284,7 @@ function makeGradient(ctx, chartArea, topColor, bottomColor) {
     return g;
 }
 
-// ── 16. SHARED CHART SCALES ───────────────────────────────────────────────────
+// ── 17. SHARED CHART SCALES ───────────────────────────────────────────────────
 
 const sharedScales = {
     x: {
@@ -280,7 +292,7 @@ const sharedScales = {
         grid: { display: false },
         ticks: {
             color: '#94a3b8',
-            font: { family: 'Inter', size: 11, weight: '500' },
+            font: { size: 11, weight: '500' },
             maxRotation: 0,
             autoSkip: true,
             maxTicksLimit: 10
@@ -293,7 +305,7 @@ const sharedScales = {
         grid: { color: 'rgba(148,163,184,0.1)', drawBorder: false },
         ticks: {
             color: '#94a3b8',
-            font: { family: 'Inter', size: 11, weight: '500' },
+            font: { size: 11, weight: '500' },
             padding: 12,
             callback(value) {
                 if (value >= 1000000) return (value / 1000000).toFixed(1) + T.millions + CURRENCY;
@@ -305,7 +317,7 @@ const sharedScales = {
     }
 };
 
-// ── 17. TYPE A — STACKED AREA CHART ──────────────────────────────────────────
+// ── 18. TYPE A — STACKED AREA CHART ──────────────────────────────────────────
 
 function buildTypeADatasets() {
     const { initialDeposit: p, monthlyInvestment: m, duration: d, investownRate: r } = state;
@@ -368,7 +380,7 @@ function getTypeAOptions() {
                     pointStyle: 'circle',
                     padding: 24,
                     color: '#64748b',
-                    font: { family: 'Inter', size: 13, weight: '500' },
+                    font: { size: 13, weight: '500' },
                     boxWidth: 8,
                     boxHeight: 8,
                     generateLabels(chart) {
@@ -393,8 +405,8 @@ function getTypeAOptions() {
                 cornerRadius: 12,
                 displayColors: true,
                 boxPadding: 6,
-                titleFont: { family: 'Inter', size: 14, weight: '600' },
-                bodyFont:  { family: 'Inter', size: 13 },
+                titleFont: { size: 14, weight: '600' },
+                bodyFont:  { size: 13 },
                 callbacks: {
                     title: ctx => T.year + ' ' + ctx[0].label,
                     label(context) {
@@ -415,7 +427,7 @@ function getTypeAOptions() {
     };
 }
 
-// ── 18. TYPE B — COMPARISON MULTI-LINE CHART ─────────────────────────────────
+// ── 19. TYPE B — COMPARISON MULTI-LINE CHART ─────────────────────────────────
 
 function buildTypeBDatasets() {
     const { initialDeposit: p, monthlyInvestment: m, duration: d } = state;
@@ -513,8 +525,8 @@ function getTypeBOptions() {
                 cornerRadius: 12,
                 displayColors: true,
                 boxPadding: 6,
-                titleFont: { family: 'Inter', size: 14, weight: '600' },
-                bodyFont:  { family: 'Inter', size: 13 },
+                titleFont: { size: 14, weight: '600' },
+                bodyFont:  { size: 13 },
                 callbacks: {
                     title: ctx => T.year + ' ' + ctx[0].label,
                     label: ctx => ' ' + ctx.dataset.label + ': ' + formatNumber(ctx.raw) + CURRENCY
@@ -525,7 +537,7 @@ function getTypeBOptions() {
     };
 }
 
-// ── 19. UNIFIED CHART UPDATE ──────────────────────────────────────────────────
+// ── 20. UNIFIED CHART UPDATE ──────────────────────────────────────────────────
 
 function updateChart() {
     const canvas = el('investmentChart');
@@ -549,7 +561,7 @@ function updateChart() {
     }
 }
 
-// ── 20. COMPARISON TOGGLE LISTENERS (type B only) ─────────────────────────────
+// ── 21. COMPARISON TOGGLE LISTENERS (type B only) ─────────────────────────────
 
 function initComparisonToggles(wrapper) {
     wrapper.querySelectorAll('.int-calc_comparison-toggle').forEach(btn => {
@@ -589,7 +601,7 @@ function initComparisonToggles(wrapper) {
     });
 }
 
-// ── 21. MAIN INPUT LISTENERS ──────────────────────────────────────────────────
+// ── 22. MAIN INPUT LISTENERS ──────────────────────────────────────────────────
 
 function initInputListeners(wrapper) {
     const depositInput = el('initialDepositInput');
@@ -651,13 +663,17 @@ function initInputListeners(wrapper) {
     });
 }
 
-// ── 22. INIT ──────────────────────────────────────────────────────────────────
+// ── 23. INIT ──────────────────────────────────────────────────────────────────
 
 function init() {
     const wrapper = document.querySelector('.int-calc_wrapper');
     if (!wrapper) return;
 
     const type = getCalcType();
+
+    // Apply page font to Chart.js globally before any chart is created.
+    // This fixes Safari, which does not inherit font-family into canvas contexts.
+    applyChartFont();
 
     updateSliderFill();
     updateResult();
