@@ -5,31 +5,29 @@
 //   <div int-calc-type="b" class="int-calc_wrapper">  -> comparison multi-line chart
 //
 // Locale support (detected from <html lang>):
-//   lang="cs" (Webflow default) -> space thousands,  "Kč" suffix, CZK values & steps
-//   any other lang              -> comma thousands,   "€"  suffix, EUR values & steps
-//                                  initial values converted from CZK via live ECB rate
+//   lang="cs"  -> Czech strings, space thousands, "Kč" suffix
+//   any other  -> English strings, comma thousands, "Kč" suffix
+//   CZK values and steps are always used regardless of locale
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── 1. LOCALE ─────────────────────────────────────────────────────────────────
-// Detected once at parse time so every constant below can reference it.
 
 const isEN = (document.documentElement.lang || '').toLowerCase() !== 'cs';
 
 // ── 2. TRANSLATIONS ───────────────────────────────────────────────────────────
-// All user-visible strings live here. Add more locales by extending this object.
 
 const I18N = {
     cs: {
         year:           'Rok',
         total:          'Celkem',
         returns:        'Zhodnocení',
-        invested:       'Investice',          // Type A legend + tooltip
-        investedLabel:  'Investováno',        // Type B baseline label
+        invested:       'Investice',
+        investedLabel:  'Investováno',
         investown:      'Investown',
         securities:     'Spořicí účet',
         bonds:          'Dluhopisy',
-        millions:       '\u00a0M',            // " M"
-        thousands:      '\u00a0tis.',         // " tis."
+        millions:       '\u00a0M',
+        thousands:      '\u00a0tis.',
     },
     en: {
         year:           'Year',
@@ -45,30 +43,29 @@ const I18N = {
     }
 };
 
-const T = isEN ? I18N.en : I18N.cs;   // shorthand used throughout the file
+const T = isEN ? I18N.en : I18N.cs;
 
 // ── 3. FORMATTING CONSTANTS ───────────────────────────────────────────────────
 
-const CURRENCY  = isEN ? '\u00a0\u20ac' : '\u00a0K\u010d'; // " €" | " Kč"
-const THOUSANDS = isEN ? ','            : '\u00a0';          // comma | nb-space
+const CURRENCY  = '\u00a0K\u010d';
+const THOUSANDS = isEN ? ',' : '\u00a0';
 const TRUNCATED = isEN
-    ? '99,999,999\u00a0\u20ac...'
+    ? '99,999,999\u00a0K\u010d...'
     : '99\u00a0999\u00a0999\u00a0K\u010d...';
 
 // ── 4. STEPS (± buttons) ──────────────────────────────────────────────────────
-// EN uses smaller EUR-appropriate increments; CS keeps the original CZK steps.
 
-const STEPS = isEN
-    ? { initialDeposit: 1000, monthlyInvestment: 100 }
-    : { initialDeposit: 10000, monthlyInvestment: 1000 };
+const STEPS = {
+    initialDeposit:    10000,
+    monthlyInvestment: 1000
+};
 
 // ── 5. INITIAL VALUES ─────────────────────────────────────────────────────────
-// Hardcoded defaults per locale. EN values are also overwritten by the live
-// ECB rate fetch (see section 7), so these act as the pre-fetch placeholder.
 
-const DEFAULTS = isEN
-    ? { initialDeposit: 5000, monthlyInvestment: 200 }
-    : { initialDeposit: 120000, monthlyInvestment: 5000 };
+const DEFAULTS = {
+    initialDeposit:    120000,
+    monthlyInvestment: 5000
+};
 
 // ── 6. DYNAMIC INVESTOWN RATE ─────────────────────────────────────────────────
 
@@ -110,42 +107,21 @@ const comparisonToggles = {
 
 let chartInstance = null;
 
-// ── 8. ECB EXCHANGE RATE (EN only) ────────────────────────────────────────────
-// Free daily XML feed — no API key, CORS headers included by ECB.
-// Fetches CZK/EUR and converts the EN initial values at runtime.
+// ── 8. YEAR LABEL HELPER ──────────────────────────────────────────────────────
+// CS: 1 = "rok", 2–4 = "roky", 5+ = "let"
+// EN: 1 = "year", 2+ = "years"
 
-const ECB_FALLBACK_CZK_PER_EUR = 25;
-
-async function fetchEcbCzkRate() {
-    const ECB_URL = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
-    try {
-        const res = await fetch(ECB_URL);
-        if (!res.ok) throw new Error('ECB HTTP ' + res.status);
-        const xml = new DOMParser().parseFromString(await res.text(), 'application/xml');
-        const node = xml.querySelector('Cube[currency="CZK"]');
-        if (!node) throw new Error('CZK not found in ECB feed');
-        const rate = parseFloat(node.getAttribute('rate'));
-        if (isNaN(rate) || rate <= 0) throw new Error('Invalid CZK rate: ' + rate);
-        return rate;
-    } catch (e) {
-        console.warn('[int-calc] ECB fetch failed, using fallback rate.', e);
-        return ECB_FALLBACK_CZK_PER_EUR;
+function getYearLabel(years) {
+    if (isEN) {
+        return years === 1 ? 'year' : 'years';
     }
+    if (years === 1)                return 'rok';
+    if (years >= 2 && years <= 4)   return 'roky';
+    return 'let';
 }
 
-// Recalculate EN defaults from live CZK/EUR rate and refresh UI
-function applyEurRate(czkPerEur) {
-    // Round to nearest step increment for clean numbers
-    state.initialDeposit    = Math.round((120000 / czkPerEur) / STEPS.initialDeposit)    * STEPS.initialDeposit;
-    state.monthlyInvestment = Math.round((5000   / czkPerEur) / STEPS.monthlyInvestment) * STEPS.monthlyInvestment;
-
-    const depositInput = el('initialDepositInput');
-    const monthlyInput = el('monthlyInvestmentInput');
-    if (depositInput) depositInput.value = formatNumber(state.initialDeposit, true);
-    if (monthlyInput) monthlyInput.value  = formatNumber(state.monthlyInvestment, true);
-
-    updateResult();
-    updateChart();
+function updateDurationLabel(years) {
+    setText('durationValue', years + '\u00a0' + getYearLabel(years));
 }
 
 // ── 9. CALCULATOR TYPE ────────────────────────────────────────────────────────
@@ -199,7 +175,6 @@ function formatNumber(num, truncate = false) {
     return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, THOUSANDS);
 }
 
-// Strips both nb-spaces (CS) and commas (EN) so either locale parses correctly
 function parseFormattedNumber(str) {
     return parseInt(str.replace(/[\s\u00a0,]/g, '')) || 0;
 }
@@ -245,18 +220,10 @@ function updateSliderFill() {
 }
 
 // ── 15. SAFARI / iOS FONT FIX ────────────────────────────────────────────────
-// Safari (desktop and iOS) does not inherit font-family into canvas contexts
-// from the CSS cascade. Additionally, on iOS the font may not yet be resolved
-// at DOMContentLoaded, so we must wait for document.fonts.ready before reading
-// getComputedStyle. Chart.js picks up Chart.defaults.font.family when each
-// canvas context is created, so setting it after fonts are ready and then
-// forcing a chart redraw guarantees the correct font on all platforms.
 
 function applyChartFont() {
     const computed = getComputedStyle(document.body).fontFamily;
     Chart.defaults.font.family = computed || 'Inter, sans-serif';
-    // If the chart was already created by the setTimeout in init(),
-    // force a full redraw so it picks up the now-correct font family.
     if (chartInstance) chartInstance.update();
 }
 
@@ -595,8 +562,6 @@ function initComparisonToggles(wrapper) {
     bindRateInput('compSecuritiesRate', 'securities');
     bindRateInput('compBondsRate', 'bonds');
 
-    // Normalise rate input display: HTML default uses dot (e.g. value="3.5")
-    // CS needs comma decimal, EN keeps dot
     ['compSecuritiesRate', 'compBondsRate'].forEach(id => {
         const input = el(id);
         if (input) input.value = isEN
@@ -617,12 +582,9 @@ function initInputListeners(wrapper) {
         return;
     }
 
-    // ± buttons — use locale-aware step values, ignoring the HTML data-step attribute
     wrapper.querySelectorAll('.int-calc_control-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            const target  = this.dataset.target;
-            // Direction comes from the HTML attribute (+step or -step),
-            // magnitude is overridden by the locale-aware STEPS constant.
+            const target   = this.dataset.target;
             const htmlStep = parseInt(this.dataset.step, 10);
             const sign     = htmlStep < 0 ? -1 : 1;
 
@@ -660,7 +622,7 @@ function initInputListeners(wrapper) {
 
     slider.addEventListener('input', function() {
         state.duration = parseInt(this.value, 10);
-        setText('durationValue', this.value);
+        updateDurationLabel(state.duration);
         updateSliderFill();
         updateResult();
         updateChart();
@@ -675,22 +637,12 @@ function init() {
 
     const type = getCalcType();
 
-    // Wait for all web fonts to be ready before applying to Chart.js.
-    // document.fonts.ready is the only reliable hook on iOS Safari, where fonts
-    // may not be resolved at DOMContentLoaded. applyChartFont() also triggers a
-    // chart redraw in case the chart was already created by the setTimeout below.
     document.fonts.ready.then(applyChartFont);
 
     updateSliderFill();
+    updateDurationLabel(state.duration);   // set correct label on page load
     updateResult();
     initInputListeners(wrapper);
-
-    // Swap visible currency label from "Kč" to "€" on EN locale
-    if (isEN) {
-        wrapper.querySelectorAll('.int-calc_value-input-currency').forEach(node => {
-            node.textContent = '\u20ac';
-        });
-    }
 
     if (type === 'b') {
         const togglesPanel = wrapper.querySelector('.int-calc_comparison-toggles');
@@ -705,11 +657,6 @@ function init() {
     }
 
     setTimeout(updateChart, 100);
-
-    // EN: fetch live CZK/EUR rate and update initial values (overrides DEFAULTS.en)
-    if (isEN) {
-        fetchEcbCzkRate().then(applyEurRate);
-    }
 }
 
 document.addEventListener('DOMContentLoaded', init);
