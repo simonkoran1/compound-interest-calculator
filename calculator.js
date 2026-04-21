@@ -47,7 +47,7 @@ const T = isEN ? I18N.en : I18N.cs;
 
 // ── 3. FORMATTING CONSTANTS ───────────────────────────────────────────────────
 
-const CURRENCY  = '\u00a0K\u010d';
+const CURRENCY = isEN ? '\u00a0CZK' : '\u00a0K\u010d';
 const THOUSANDS = isEN ? ',' : '\u00a0';
 const TRUNCATED = isEN
     ? '99,999,999\u00a0K\u010d...'
@@ -115,13 +115,14 @@ function getYearLabel(years) {
     if (isEN) {
         return years === 1 ? 'year' : 'years';
     }
-    if (years === 1)                return 'rok';
-    if (years >= 2 && years <= 4)   return 'roky';
+    if (years === 1)              return 'rok';
+    if (years >= 2 && years <= 4) return 'roky';
     return 'let';
 }
 
 function updateDurationLabel(years) {
-    setText('durationValue', years + '\u00a0' + getYearLabel(years));
+    setText('durationValue', years);
+    setText('durationValueSuffix', getYearLabel(years));
 }
 
 // ── 9. CALCULATOR TYPE ────────────────────────────────────────────────────────
@@ -150,19 +151,19 @@ function calculateTotalInvested(principal, monthlyContribution, years) {
 
 function generateLabels(years) {
     const currentYear = new Date().getFullYear();
-    const labels = [];
+    const labels = [currentYear];
     for (let y = 1; y <= years; y++) labels.push(currentYear + y);
     return labels;
 }
 
 function generateInvestedData(principal, monthly, years) {
-    const data = [];
+    const data = [principal];
     for (let y = 1; y <= years; y++) data.push(calculateTotalInvested(principal, monthly, y));
     return data;
 }
 
 function generateFutureValueData(principal, monthly, years, rate) {
-    const data = [];
+    const data = [principal];
     for (let y = 1; y <= years; y++) data.push(calculateFutureValue(principal, monthly, y, rate));
     return data;
 }
@@ -640,7 +641,7 @@ function init() {
     document.fonts.ready.then(applyChartFont);
 
     updateSliderFill();
-    updateDurationLabel(state.duration);   // set correct label on page load
+    updateDurationLabel(state.duration);
     updateResult();
     initInputListeners(wrapper);
 
