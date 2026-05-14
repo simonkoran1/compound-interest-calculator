@@ -1,8 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Investown Investment Calculator
-// Supports two modes set via the wrapper attribute:
-//   <div int-calc-type="a" class="int-calc_wrapper">  -> simple stacked-area chart
-//   <div int-calc-type="b" class="int-calc_wrapper">  -> comparison multi-line chart
+//
+// Chart layers (bottom to top):
+//   - Gray invested area (filled to origin, dashed line on top)
+//   - Green Investown returns area (filled to invested line, thick line on top)
+//   - Orange savings account comparison line (thick, no fill)
+//   - Mauve bonds comparison line (thick, no fill)
+//
+// Comparison lines are toggled via .int-calc_comparison-toggle checkboxes.
+// Their rates are editable via the inline rate inputs.
 //
 // Locale support (detected from <html lang>):
 //   lang="cs"  -> Czech strings, space thousands, "Kč" suffix
@@ -18,28 +24,24 @@ const isEN = (document.documentElement.lang || '').toLowerCase() !== 'cs';
 
 const I18N = {
     cs: {
-        year:           'Rok',
-        total:          'Celkem',
-        returns:        'Zhodnocení',
-        invested:       'Investice',
-        investedLabel:  'Investováno',
-        investown:      'Investown',
-        securities:     'Spořicí účet',
-        bonds:          'Dluhopisy',
-        millions:       '\u00a0M',
-        thousands:      '\u00a0tis.',
+        year:        'Rok',
+        returns:     'Zhodnocení',
+        invested:    'Investice',
+        investown:   'Investown',
+        securities:  'Spořicí účet',
+        bonds:       'Dluhopisy',
+        millions:    '\u00a0M',
+        thousands:   '\u00a0tis.',
     },
     en: {
-        year:           'Year',
-        total:          'Total',
-        returns:        'Returns',
-        invested:       'Invested',
-        investedLabel:  'Invested',
-        investown:      'Investown',
-        securities:     'Savings account',
-        bonds:          'Bonds',
-        millions:       '\u00a0M',
-        thousands:      'k',
+        year:        'Year',
+        returns:     'Returns',
+        invested:    'Invested',
+        investown:   'Investown',
+        securities:  'Savings account',
+        bonds:       'Bonds',
+        millions:    '\u00a0M',
+        thousands:   'k',
     }
 };
 
@@ -125,15 +127,7 @@ function updateDurationLabel(years) {
     setText('durationValueSuffix', getYearLabel(years));
 }
 
-// ── 9. CALCULATOR TYPE ────────────────────────────────────────────────────────
-
-function getCalcType() {
-    const wrapper = document.querySelector('.int-calc_wrapper');
-    if (!wrapper) return 'a';
-    return (wrapper.getAttribute('int-calc-type') || 'a').toLowerCase().trim() === 'b' ? 'b' : 'a';
-}
-
-// ── 10. SHARED MATH ───────────────────────────────────────────────────────────
+// ── 9. SHARED MATH ────────────────────────────────────────────────────────────
 
 function calculateFutureValue(principal, monthlyContribution, years, annualRate) {
     const monthlyRate = annualRate / 12;
@@ -168,7 +162,7 @@ function generateFutureValueData(principal, monthly, years, rate) {
     return data;
 }
 
-// ── 11. FORMAT HELPERS ────────────────────────────────────────────────────────
+// ── 10. FORMAT HELPERS ────────────────────────────────────────────────────────
 
 function formatNumber(num, truncate = false) {
     const rounded = Math.round(num);
@@ -188,7 +182,7 @@ function formatRate(value) {
     return isEN ? value.toFixed(1) : value.toFixed(1).replace('.', ',');
 }
 
-// ── 12. DOM HELPERS ───────────────────────────────────────────────────────────
+// ── 11. DOM HELPERS ───────────────────────────────────────────────────────────
 
 function el(id) { return document.getElementById(id); }
 
@@ -197,7 +191,7 @@ function setText(id, text) {
     if (node) node.textContent = text;
 }
 
-// ── 13. RESULT DISPLAY ────────────────────────────────────────────────────────
+// ── 12. RESULT DISPLAY ────────────────────────────────────────────────────────
 
 function updateResult() {
     const futureValue = calculateFutureValue(
@@ -211,7 +205,7 @@ function updateResult() {
     setText('profitValue', '+ ' + formatNumber(profit) + CURRENCY);
 }
 
-// ── 14. SLIDER FILL ───────────────────────────────────────────────────────────
+// ── 13. SLIDER FILL ───────────────────────────────────────────────────────────
 
 function updateSliderFill() {
     const slider = el('durationSlider');
@@ -220,7 +214,7 @@ function updateSliderFill() {
     fill.style.width = ((slider.value - slider.min) / (slider.max - slider.min)) * 100 + '%';
 }
 
-// ── 15. SAFARI / iOS FONT FIX ────────────────────────────────────────────────
+// ── 14. SAFARI / iOS FONT FIX ────────────────────────────────────────────────
 
 function applyChartFont() {
     const computed = getComputedStyle(document.body).fontFamily;
@@ -228,7 +222,7 @@ function applyChartFont() {
     if (chartInstance) chartInstance.update();
 }
 
-// ── 16. CHART HELPERS ─────────────────────────────────────────────────────────
+// ── 15. CHART HELPERS ─────────────────────────────────────────────────────────
 
 const verticalLinePlugin = {
     id: 'verticalLine',
@@ -256,9 +250,9 @@ function makeGradient(ctx, chartArea, topColor, bottomColor) {
     return g;
 }
 
-// ── 17. SHARED CHART SCALES ───────────────────────────────────────────────────
+// ── 16. CHART SCALES ──────────────────────────────────────────────────────────
 
-const sharedScales = {
+const chartScales = {
     x: {
         display: true,
         grid: { display: false },
@@ -289,16 +283,21 @@ const sharedScales = {
     }
 };
 
-// ── 18. TYPE A — STACKED AREA CHART ──────────────────────────────────────────
+// ── 17. DATASETS ──────────────────────────────────────────────────────────────
+// Order matters for fill stacking: Investown returns (index 0) fills to
+// Invested line below it via `fill: '+1'`. Comparison lines stack on top.
 
-function buildTypeADatasets() {
-    const { initialDeposit: p, monthlyInvestment: m, duration: d, investownRate: r } = state;
-    return [
-        {
-            label: T.returns,
-            data: generateFutureValueData(p, m, d, r),
+function buildDatasets() {
+    const { initialDeposit: p, monthlyInvestment: m, duration: d } = state;
+    const datasets = [];
+
+    // 1. Investown returns (green filled area, thick line)
+    if (comparisonToggles.investown) {
+        datasets.push({
+            label: T.investown,
+            data: generateFutureValueData(p, m, d, state.investownRate),
             borderColor: '#22c55e',
-            borderWidth: 2.5,
+            borderWidth: 3.5,
             backgroundColor(context) {
                 const { ctx, chartArea } = context.chart;
                 if (!chartArea) return 'rgba(34,197,94,0.2)';
@@ -312,123 +311,38 @@ function buildTypeADatasets() {
             pointHoverBorderColor: '#fff',
             pointHoverBorderWidth: 2,
             order: 1
-        },
-        {
-            label: T.invested,
-            data: generateInvestedData(p, m, d),
-            borderColor: '#6B7280',
-            borderWidth: 2,
-            borderDash: [6, 4],
-            backgroundColor(context) {
-                const { ctx, chartArea } = context.chart;
-                if (!chartArea) return 'rgba(148,163,184,0.2)';
-                return makeGradient(ctx, chartArea, 'rgba(148,163,184,0.6)', 'rgba(148,163,184,0.2)');
-            },
-            fill: 'origin',
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: '#9CA3AF',
-            pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2,
-            order: 2
-        }
-    ];
-}
-
-function getTypeAOptions() {
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        hover:       { mode: 'index', intersect: false },
-        plugins: {
-            legend: {
-                display: true,
-                position: 'bottom',
-                onClick: () => {},
-                labels: {
-                    usePointStyle: true,
-                    pointStyle: 'circle',
-                    padding: 24,
-                    color: '#64748b',
-                    font: { size: 13, weight: '500' },
-                    boxWidth: 8,
-                    boxHeight: 8,
-                    generateLabels(chart) {
-                        return chart.data.datasets.map((ds, i) => ({
-                            text:        ds.label,
-                            fillStyle:   i === 0 ? '#22c55e' : '#9CA3AF',
-                            strokeStyle: i === 0 ? '#22c55e' : '#9CA3AF',
-                            pointStyle: 'circle',
-                            hidden: false,
-                            datasetIndex: i
-                        }));
-                    }
-                }
-            },
-            tooltip: {
-                backgroundColor: 'rgba(15,23,42,0.95)',
-                titleColor: '#f8fafc',
-                bodyColor:  '#cbd5e1',
-                borderColor: 'rgba(148,163,184,0.2)',
-                borderWidth: 1,
-                padding: 16,
-                cornerRadius: 12,
-                displayColors: true,
-                boxPadding: 6,
-                titleFont: { size: 14, weight: '600' },
-                bodyFont:  { size: 13 },
-                callbacks: {
-                    title: ctx => T.year + ' ' + ctx[0].label,
-                    label(context) {
-                        if (context.datasetIndex === 0) {
-                            const total    = context.raw;
-                            const invested = context.chart.data.datasets[1].data[context.dataIndex];
-                            return ' ' + T.returns + ': ' + formatNumber(total - invested) + CURRENCY;
-                        }
-                        return ' ' + context.dataset.label + ': ' + formatNumber(context.raw) + CURRENCY;
-                    },
-                    afterBody(context) {
-                        return '\n' + T.total + ': ' + formatNumber(context[0].raw) + CURRENCY;
-                    }
-                }
-            }
-        },
-        scales: sharedScales
-    };
-}
-
-// ── 19. TYPE B — COMPARISON MULTI-LINE CHART ─────────────────────────────────
-
-function buildTypeBDatasets() {
-    const { initialDeposit: p, monthlyInvestment: m, duration: d } = state;
-    const datasets = [];
-
-    if (comparisonToggles.investown) {
-        datasets.push({
-            label: T.investown,
-            data: generateFutureValueData(p, m, d, state.investownRate),
-            borderColor: '#3536FF',
-            borderWidth: 2.5,
-            backgroundColor: 'transparent',
-            fill: false,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#3536FF',
-            pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2,
-            order: 1
         });
     }
 
+    // 2. Invested (gray filled area, dashed line) — target of Investown fill
+    datasets.push({
+        label: T.invested,
+        data: generateInvestedData(p, m, d),
+        borderColor: '#6B7280',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        backgroundColor(context) {
+            const { ctx, chartArea } = context.chart;
+            if (!chartArea) return 'rgba(148,163,184,0.2)';
+            return makeGradient(ctx, chartArea, 'rgba(148,163,184,0.6)', 'rgba(148,163,184,0.2)');
+        },
+        fill: 'origin',
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#9CA3AF',
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        order: 2
+    });
+
+    // 3. Savings account comparison (thick line, no fill)
     if (comparisonToggles.securities) {
         datasets.push({
             label: T.securities,
             data: generateFutureValueData(p, m, d, comparisonRates.securities),
             borderColor: '#E89B3C',
-            borderWidth: 2.5,
+            borderWidth: 3,
             backgroundColor: 'transparent',
             fill: false,
             tension: 0.4,
@@ -437,16 +351,17 @@ function buildTypeBDatasets() {
             pointHoverBackgroundColor: '#E89B3C',
             pointHoverBorderColor: '#fff',
             pointHoverBorderWidth: 2,
-            order: 2
+            order: 3
         });
     }
 
+    // 4. Bonds comparison (thick line, no fill)
     if (comparisonToggles.bonds) {
         datasets.push({
             label: T.bonds,
             data: generateFutureValueData(p, m, d, comparisonRates.bonds),
             borderColor: '#B5A3AD',
-            borderWidth: 2.5,
+            borderWidth: 3,
             backgroundColor: 'transparent',
             fill: false,
             tension: 0.4,
@@ -455,31 +370,16 @@ function buildTypeBDatasets() {
             pointHoverBackgroundColor: '#B5A3AD',
             pointHoverBorderColor: '#fff',
             pointHoverBorderWidth: 2,
-            order: 3
+            order: 4
         });
     }
-
-    datasets.push({
-        label: T.investedLabel,
-        data: generateInvestedData(p, m, d),
-        borderColor: '#6B7280',
-        borderWidth: 2,
-        borderDash: [6, 4],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        pointHoverBackgroundColor: '#9CA3AF',
-        pointHoverBorderColor: '#fff',
-        pointHoverBorderWidth: 2,
-        order: 4
-    });
 
     return datasets;
 }
 
-function getTypeBOptions() {
+// ── 18. CHART OPTIONS ─────────────────────────────────────────────────────────
+
+function getChartOptions() {
     return {
         responsive: true,
         maintainAspectRatio: false,
@@ -499,25 +399,35 @@ function getTypeBOptions() {
                 boxPadding: 6,
                 titleFont: { size: 14, weight: '600' },
                 bodyFont:  { size: 13 },
+                itemSort(a, b) {
+                    // Explicit display order in tooltip:
+                    // Investown -> Bonds -> Savings account -> Invested
+                    const priority = {
+                        [T.investown]:  0,
+                        [T.bonds]:      1,
+                        [T.securities]: 2,
+                        [T.invested]:   3
+                    };
+                    return (priority[a.dataset.label] ?? 99) - (priority[b.dataset.label] ?? 99);
+                },
                 callbacks: {
                     title: ctx => T.year + ' ' + ctx[0].label,
                     label: ctx => ' ' + ctx.dataset.label + ': ' + formatNumber(ctx.raw) + CURRENCY
                 }
             }
         },
-        scales: sharedScales
+        scales: chartScales
     };
 }
 
-// ── 20. UNIFIED CHART UPDATE ──────────────────────────────────────────────────
+// ── 19. CHART UPDATE ──────────────────────────────────────────────────────────
 
 function updateChart() {
     const canvas = el('investmentChart');
     if (!canvas) return;
 
-    const type     = getCalcType();
     const labels   = generateLabels(state.duration);
-    const datasets = type === 'b' ? buildTypeBDatasets() : buildTypeADatasets();
+    const datasets = buildDatasets();
 
     if (chartInstance) {
         chartInstance.data.labels   = labels;
@@ -528,12 +438,12 @@ function updateChart() {
             type: 'line',
             data: { labels, datasets },
             plugins: [verticalLinePlugin],
-            options: type === 'b' ? getTypeBOptions() : getTypeAOptions()
+            options: getChartOptions()
         });
     }
 }
 
-// ── 21. COMPARISON TOGGLE LISTENERS (type B only) ─────────────────────────────
+// ── 20. COMPARISON TOGGLE LISTENERS ───────────────────────────────────────────
 
 function initComparisonToggles(wrapper) {
     wrapper.querySelectorAll('.int-calc_comparison-toggle').forEach(btn => {
@@ -571,7 +481,7 @@ function initComparisonToggles(wrapper) {
     });
 }
 
-// ── 22. MAIN INPUT LISTENERS ──────────────────────────────────────────────────
+// ── 21. MAIN INPUT LISTENERS ──────────────────────────────────────────────────
 
 function initInputListeners(wrapper) {
     const depositInput = el('initialDepositInput');
@@ -630,13 +540,11 @@ function initInputListeners(wrapper) {
     });
 }
 
-// ── 23. INIT ──────────────────────────────────────────────────────────────────
+// ── 22. INIT ──────────────────────────────────────────────────────────────────
 
 function init() {
     const wrapper = document.querySelector('.int-calc_wrapper');
     if (!wrapper) return;
-
-    const type = getCalcType();
 
     document.fonts.ready.then(applyChartFont);
 
@@ -645,17 +553,15 @@ function init() {
     updateResult();
     initInputListeners(wrapper);
 
-    if (type === 'b') {
-        const togglesPanel = wrapper.querySelector('.int-calc_comparison-toggles');
-        if (togglesPanel) togglesPanel.classList.add('active');
+    const togglesPanel = wrapper.querySelector('.int-calc_comparison-toggles');
+    if (togglesPanel) togglesPanel.classList.add('active');
 
-        wrapper.querySelectorAll('.int-calc_comparison-toggle').forEach(btn => {
-            const product = btn.dataset.product;
-            if (product && comparisonToggles[product]) btn.classList.add('active');
-        });
+    wrapper.querySelectorAll('.int-calc_comparison-toggle').forEach(btn => {
+        const product = btn.dataset.product;
+        if (product && comparisonToggles[product]) btn.classList.add('active');
+    });
 
-        initComparisonToggles(wrapper);
-    }
+    initComparisonToggles(wrapper);
 
     setTimeout(updateChart, 100);
 }
